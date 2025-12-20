@@ -23,6 +23,9 @@
 #error Define ZB_ED_ROLE in idf.py menuconfig to compile light (End Device) source code.
 #endif
 
+#include "driver/gpio.h"
+#define LED_PIN    GPIO_NUM_15
+
 static const char *TAG = "ESP_ZB_ON_OFF_LIGHT";
 /********************* Define functions **************************/
 static esp_err_t deferred_driver_init(void)
@@ -104,6 +107,7 @@ static esp_err_t zb_attribute_handler(const esp_zb_zcl_set_attr_value_message_t 
                 light_state = message->attribute.data.value ? *(bool *)message->attribute.data.value : light_state;
                 ESP_LOGI(TAG, "Light sets to %s", light_state ? "On" : "Off");
                 light_driver_set_power(light_state);
+                gpio_set_level(LED_PIN, !light_state);
             }
         }
     }
@@ -146,6 +150,17 @@ static void esp_zb_task(void *pvParameters)
 
 void app_main(void)
 {
+
+    // Configuration LED (output)
+    gpio_config_t led_conf = {
+        .pin_bit_mask = (1ULL << LED_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    gpio_config(&led_conf);
+
     esp_zb_platform_config_t config = {
         .radio_config = ESP_ZB_DEFAULT_RADIO_CONFIG(),
         .host_config = ESP_ZB_DEFAULT_HOST_CONFIG(),
