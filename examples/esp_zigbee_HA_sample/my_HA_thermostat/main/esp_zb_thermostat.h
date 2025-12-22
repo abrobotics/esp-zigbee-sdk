@@ -22,7 +22,6 @@
 #define ED_KEEP_ALIVE                   3000    /* 3000 millisecond */
 #define HA_ESP_LIGHT_ENDPOINT           10      /* esp light bulb device endpoint */
 #define HA_ESP_SENSOR_ENDPOINT          11      /* esp temperature sensor device endpoint */
-#define HA_ESP_APP_ENDPOINT             12      /* secondary application endpoint */
 #define ESP_ZB_PRIMARY_CHANNEL_MASK     ESP_ZB_TRANSCEIVER_ALL_CHANNELS_MASK  /* Zigbee primary channel mask */
 
 #define ESP_TEMP_SENSOR_UPDATE_INTERVAL (1)     /* Local sensor update interval (second) */

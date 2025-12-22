@@ -95,23 +95,6 @@ static esp_zb_cluster_list_t *temperature_sensor_clusters_create(esp_zb_temperat
     return cluster_list;
 }
 
-static esp_zb_cluster_list_t *app_status_clusters_create(void)
-{
-    esp_zb_cluster_list_t *cluster_list = esp_zb_zcl_cluster_list_create();
-    esp_zb_basic_cluster_cfg_t basic_cfg = {
-        .zcl_version = ESP_ZB_ZCL_BASIC_ZCL_VERSION_DEFAULT_VALUE,
-        .power_source = ESP_ZB_ZCL_BASIC_POWER_SOURCE_DEFAULT_VALUE,
-    };
-    esp_zb_identify_cluster_cfg_t identify_cfg = {
-        .identify_time = ESP_ZB_ZCL_IDENTIFY_IDENTIFY_TIME_DEFAULT_VALUE,
-    };
-
-    esp_zb_cluster_list_add_basic_cluster(cluster_list, esp_zb_basic_cluster_create(&basic_cfg), ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
-    esp_zb_cluster_list_add_identify_cluster(cluster_list, esp_zb_identify_cluster_create(&identify_cfg), ESP_ZB_ZCL_CLUSTER_SERVER_ROLE);
-
-    return cluster_list;
-}
-
 static void bdb_start_top_level_commissioning_cb(uint8_t mode_mask)
 {
     ESP_RETURN_ON_FALSE(esp_zb_bdb_start_top_level_commissioning(mode_mask) == ESP_OK, , TAG, "Failed to start Zigbee commissioning");
@@ -248,21 +231,12 @@ static void esp_zb_task(void *pvParameters)
     };
     esp_zb_ep_list_add_ep(ep_list, temperature_sensor_clusters_create(&sensor_cfg), sensor_endpoint_config);
 
-    esp_zb_endpoint_config_t app_endpoint_config = {
-        .endpoint = HA_ESP_APP_ENDPOINT,
-        .app_profile_id = ESP_ZB_AF_HA_PROFILE_ID,
-        .app_device_id = ESP_ZB_HA_TEST_DEVICE_ID,
-        .app_device_version = 0,
-    };
-    esp_zb_ep_list_add_ep(ep_list, app_status_clusters_create(), app_endpoint_config);
-
     zcl_basic_manufacturer_info_t info = {
         .manufacturer_name = ESP_MANUFACTURER_NAME,
         .model_identifier = ESP_MODEL_IDENTIFIER,
     };
 
     esp_zcl_utility_add_ep_basic_manufacturer_info(ep_list, HA_ESP_LIGHT_ENDPOINT, &info);
-    esp_zcl_utility_add_ep_basic_manufacturer_info(ep_list, HA_ESP_APP_ENDPOINT, &info);
 
     esp_zb_device_register(ep_list);
     esp_zb_core_action_handler_register(zb_action_handler);
@@ -291,16 +265,6 @@ static void esp_zb_task(void *pvParameters)
     esp_zb_stack_main_loop();
 }
 
-static void app_status_task(void *pvParameters)
-{
-    uint32_t run_count = 0;
-    while (true) {
-        run_count++;
-        ESP_LOGI(TAG, "App status tick: %u", (unsigned)run_count);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
-
 void app_main(void)
 {
     /* Configuration LED (output) */
@@ -312,6 +276,7 @@ void app_main(void)
         .intr_type = GPIO_INTR_DISABLE
     };
     gpio_config(&led_conf);
+    gpio_set_level(LED_PIN, 0);
 
     esp_zb_platform_config_t config = {
         .radio_config = ESP_ZB_DEFAULT_RADIO_CONFIG(),
@@ -319,6 +284,5 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_zb_platform_config(&config));
-    xTaskCreate(app_status_task, "app_status", 2048, NULL, 5, NULL);
     xTaskCreate(esp_zb_task, "Zigbee_main", 4096, NULL, 5, NULL);
 }
