@@ -22,12 +22,30 @@
 #include "freertos/task.h"
 #include "ha/esp_zigbee_ha_standard.h"
 
+// IR
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "esp_log.h"
+#include "driver/rmt_tx.h"
+#include "ir_nec_encoder.h"
+#include "my_ir_heater.h"
+
+static rmt_handle_t rmt_handle = {.tx_channel = NULL, .nec_encoder = NULL};
+
+// AHT20
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/i2c.h"
+#include "esp_log.h"
+#include "my_aht20.h"
+
 #if !defined ZB_ED_ROLE
 #error Define ZB_ED_ROLE in idf.py menuconfig to compile thermostat (End Device) source code.
 #endif
 
 #include "driver/gpio.h"
-#define LED_PIN    GPIO_NUM_15
 
 static const char *TAG = "ESP_ZB_THERMOSTAT";
 
@@ -100,16 +118,23 @@ static void bdb_start_top_level_commissioning_cb(uint8_t mode_mask)
     ESP_RETURN_ON_FALSE(esp_zb_bdb_start_top_level_commissioning(mode_mask) == ESP_OK, , TAG, "Failed to start Zigbee commissioning");
 }
 
+
+
 static esp_err_t deferred_driver_init(void)
 {
     static bool is_inited = false;
-    temperature_sensor_config_t temp_sensor_config =
-        TEMPERATURE_SENSOR_CONFIG_DEFAULT(ESP_TEMP_SENSOR_MIN_VALUE, ESP_TEMP_SENSOR_MAX_VALUE);
+    // temperature_sensor_config_t temp_sensor_config =
+    //     TEMPERATURE_SENSOR_CONFIG_DEFAULT(ESP_TEMP_SENSOR_MIN_VALUE, ESP_TEMP_SENSOR_MAX_VALUE);
     if (!is_inited) {
-        light_driver_init(LIGHT_DEFAULT_OFF);
+        setup_ir_tx(&rmt_handle);
         ESP_RETURN_ON_ERROR(
-            temp_sensor_driver_init(&temp_sensor_config, ESP_TEMP_SENSOR_UPDATE_INTERVAL, esp_app_temp_sensor_handler),
-            TAG, "Failed to initialize temperature sensor");
+            aht20_driver_init(ESP_TEMP_SENSOR_UPDATE_INTERVAL, esp_app_temp_sensor_handler),
+            TAG, "Failed to initialize AHT20 sensor");
+
+        // light_driver_init(LIGHT_DEFAULT_OFF);
+        // ESP_RETURN_ON_ERROR(
+        //     temp_sensor_driver_init(&temp_sensor_config, ESP_TEMP_SENSOR_UPDATE_INTERVAL, esp_app_temp_sensor_handler),
+        //     TAG, "Failed to initialize temperature sensor");
         ESP_RETURN_ON_FALSE(switch_driver_init(button_func_pair, PAIR_SIZE(button_func_pair), esp_app_buttons_handler),
                             ESP_FAIL, TAG, "Failed to initialize switch driver");
         is_inited = true;
@@ -180,8 +205,8 @@ static esp_err_t zb_attribute_handler(const esp_zb_zcl_set_attr_value_message_t 
             if (message->attribute.id == ESP_ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID && message->attribute.data.type == ESP_ZB_ZCL_ATTR_TYPE_BOOL) {
                 light_state = message->attribute.data.value ? *(bool *)message->attribute.data.value : light_state;
                 ESP_LOGI(TAG, "Light sets to %s", light_state ? "On" : "Off");
-                light_driver_set_power(light_state);
-                gpio_set_level(LED_PIN, !light_state);
+                // light_driver_set_power(light_state);
+                turn_on_heater(&rmt_handle);
             }
         }
     }
@@ -267,16 +292,6 @@ static void esp_zb_task(void *pvParameters)
 
 void app_main(void)
 {
-    /* Configuration LED (output) */
-    gpio_config_t led_conf = {
-        .pin_bit_mask = (1ULL << LED_PIN),
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE
-    };
-    gpio_config(&led_conf);
-    gpio_set_level(LED_PIN, 0);
 
     esp_zb_platform_config_t config = {
         .radio_config = ESP_ZB_DEFAULT_RADIO_CONFIG(),
